@@ -35,16 +35,21 @@ public class BLEConnector
 	
 	private UUID requestedService;
 	private UUID requestedCharacteristic;
+	
+	private BLEBuffer buffer;
 
 	public BLEConnector(Context context)
 	{
 		this.context = context;
+		buffer = new BLEBuffer(128);
 		mHandler = new Handler();
 		final BluetoothManager bluetoothManager =
 				(BluetoothManager) context.getSystemService(Context.BLUETOOTH_SERVICE);
 		bleAdapter = bluetoothManager.getAdapter();
 	}
 
+	/* Public Methods */
+	
 	public void connect(long scanTime, UUID uuidService, UUID uuidCharacteristic)
 	{
 		if(bleAdapter != null && bleAdapter.isEnabled())
@@ -80,6 +85,21 @@ public class BLEConnector
 		}, scanTime);
 		genericScanning = true;
 		bleAdapter.startLeScan(mScanCallback);
+	}
+	
+	public void writeCharacteristic(String deviceAddress, byte[] message)
+	{
+		
+	}
+	
+	public void readCharacteristic(String deviceAddress, byte[] message)
+	{
+		
+	}
+	
+	public void registerForNotifications(String deviceAddress, UUID uuidService, UUID uuidCharacteristic)
+	{
+		
 	}
 
 
@@ -185,5 +205,38 @@ public class BLEConnector
 			connectedDevices.put(device.getAddress(), deviceBle);
 		}
 	}
+	
+	/* Inner classes */
+	
+	protected class QueuedMessage
+	{
+		private byte[] message;
+		private BLEDevice device;
+		
+		public QueuedMessage(byte[] message, BLEDevice device)
+		{
+			this.message = message;
+			this.device = device;
+		}
 
+		public byte[] getMessage() 
+		{
+			return message;
+		}
+
+		public void setMessage(byte[] message) 
+		{
+			this.message = message;
+		}
+
+		public BLEDevice getDevice() 
+		{
+			return device;
+		}
+
+		public void setDevice(BLEDevice device) 
+		{
+			this.device = device;
+		}	
+	}
 }
