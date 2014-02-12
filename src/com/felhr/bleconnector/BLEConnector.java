@@ -11,10 +11,21 @@ import android.bluetooth.BluetoothGattCharacteristic;
 import android.bluetooth.BluetoothGattService;
 import android.bluetooth.BluetoothManager;
 import android.content.Context;
+import android.content.Intent;
 import android.os.Handler;
 
 public class BLEConnector 
 {
+	public static final String ACTION_BROADCAST_UUIDS = "com.felhr.bleconnector.action_broadcast_uuids";
+	public static final String ACTION_DEVICE_CONNECTED = "com.felhr.bleconnector.action_device_connected";
+	public static final String ACTION_NO_CHARACTERISTIC = "com.felhr.bleconnector.action_no_characteristic";
+	public static final String ACTION_NO_SERVICE = "com.felhr.bleconnector.action_no_service";
+	public static final String ACTION_SCANNING_TERMINATED = "com.felhr.bleconnector.action_scanning_terminated";
+	
+	public static final String UUIDS_TAG = "com.felhr.bleconnector.uuids_tag";
+	public static final String DEVICE_TAG = "com.felhr.bleconnector.device_tag";
+	public static final String ADDRESS_TAG = "com.felhr.bleconnector.address_tag";
+	
 	private Context context;
 	private Handler mHandler;
 	private BluetoothAdapter bleAdapter;
@@ -44,6 +55,8 @@ public class BLEConnector
 				public void run() 
 				{
 					bleAdapter.stopLeScan(mScanCallback);
+					Intent intent = new Intent(ACTION_SCANNING_TERMINATED);
+					context.sendBroadcast(intent);
 				}
 			}, scanTime);
 			genericScanning = false;
@@ -61,6 +74,8 @@ public class BLEConnector
 			public void run() 
 			{
 				bleAdapter.stopLeScan(mScanCallback);
+				Intent intent = new Intent(ACTION_SCANNING_TERMINATED);
+				context.sendBroadcast(intent);
 			}
 		}, scanTime);
 		genericScanning = true;
@@ -98,7 +113,17 @@ public class BLEConnector
 			if(genericScanning)
 			{
 				List<BluetoothGattService> services = gatt.getServices();
-				//Broadcast List of UUIDS (TO DO)
+				String[] uuids = new String[services.size()];
+				for(int i=0;i<=services.size()-1;i++)
+				{
+					uuids[i] = services.get(i).getUuid().toString();
+				}
+				
+				Intent intent = new Intent(ACTION_BROADCAST_UUIDS);
+				intent.putExtra(UUIDS_TAG, uuids);
+				intent.putExtra(DEVICE_TAG, gatt.getDevice().getName());
+				intent.putExtra(ADDRESS_TAG, gatt.getDevice().getAddress());
+				context.sendBroadcast(intent);
 				
 			}else
 			{
@@ -108,15 +133,31 @@ public class BLEConnector
 					BluetoothGattCharacteristic characteristic = service.getCharacteristic(requestedCharacteristic);
 					if(characteristic != null)
 					{
-						// Add service and characteristic to convenient connectedDevices register (TO DO)
+						BLEDevice bleDevice  = connectedDevices.get(gatt.getDevice().getAddress());
+						bleDevice.setService(service);
+						bleDevice.setCharacteristic(characteristic);
+						String name = bleDevice.getDevice().getName();
+						String address = bleDevice.getDevice().getAddress();
+						connectedDevices.put(bleDevice.getDevice().getAddress(), bleDevice);
+						
+						Intent intent = new Intent(ACTION_DEVICE_CONNECTED);
+						intent.putExtra(DEVICE_TAG,name);
+						intent.putExtra(ADDRESS_TAG, address);
+						context.sendBroadcast(intent);
+						
 					}else
 					{
+						connectedDevices.remove(gatt.getDevice().getAddress());
+						Intent intent = new Intent(ACTION_NO_CHARACTERISTIC);
+						context.sendBroadcast(intent);
 						gatt.close();
 					}
 					
 				}else
 				{
-					// Broadcast no service available (TO DO)
+					connectedDevices.remove(gatt.getDevice().getAddress());
+					Intent intent = new Intent(ACTION_NO_SERVICE);
+					context.sendBroadcast(intent);
 					gatt.close();
 				}
 			}
@@ -141,7 +182,8 @@ public class BLEConnector
 		{
 			BluetoothGatt gatt = device.connectGatt(context, false, mGattCallback);
 			BLEDevice deviceBle = new BLEDevice(device,gatt);
-			// Add deviceBle to connectedDevices (TO DO)
+			connectedDevices.put(device.getAddress(), deviceBle);
 		}
 	}
+
 }

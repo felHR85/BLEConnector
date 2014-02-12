@@ -12,8 +12,8 @@ public class BLEDevice
 {
 	private BluetoothDevice device;
 	private BluetoothGatt gatt;
-	private BluetoothGattService service;
-	private BluetoothGattCharacteristic characteristic;
+	private BluetoothGattService service; // Current Service
+	private BluetoothGattCharacteristic characteristic; // Current Characteristic
 	
 	public BLEDevice(BluetoothDevice device, BluetoothGatt gatt, BluetoothGattService service
 			,BluetoothGattCharacteristic characteristic)
