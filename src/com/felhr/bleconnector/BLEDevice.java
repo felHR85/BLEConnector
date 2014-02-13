@@ -14,6 +14,7 @@ public class BLEDevice
 	private BluetoothGatt gatt;
 	private BluetoothGattService service; // Current Service
 	private BluetoothGattCharacteristic characteristic; // Current Characteristic
+	private boolean enabledNotifications;
 	
 	public BLEDevice(BluetoothDevice device, BluetoothGatt gatt, BluetoothGattService service
 			,BluetoothGattCharacteristic characteristic)
@@ -22,6 +23,7 @@ public class BLEDevice
 		this.gatt = gatt;
 		this.service = service;
 		this.characteristic = characteristic;
+		this.enabledNotifications = false;
 	}
 	
 	public BLEDevice(BluetoothDevice device, BluetoothGatt gatt)
@@ -78,6 +80,21 @@ public class BLEDevice
 	public List<BluetoothGattCharacteristic> getAllCharacteristics(UUID serviceuuid)
 	{
 		return gatt.getService(serviceuuid).getCharacteristics();
+	}
+	
+	public boolean getNotificationsStatus()
+	{
+		return enabledNotifications;
+	}
+	
+	public void notificationsOn()
+	{
+		enabledNotifications = true;
+	}
+	
+	public void notificationsOff()
+	{
+		enabledNotifications = false;
 	}
 	
 	

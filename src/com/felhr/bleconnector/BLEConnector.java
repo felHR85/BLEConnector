@@ -1,5 +1,4 @@
 package com.felhr.bleconnector;
-import java.util.HashMap;
 import java.util.List;
 import java.util.UUID;
 
@@ -8,6 +7,7 @@ import android.bluetooth.BluetoothDevice;
 import android.bluetooth.BluetoothGatt;
 import android.bluetooth.BluetoothGattCallback;
 import android.bluetooth.BluetoothGattCharacteristic;
+import android.bluetooth.BluetoothGattDescriptor;
 import android.bluetooth.BluetoothGattService;
 import android.bluetooth.BluetoothManager;
 import android.content.Context;
@@ -26,12 +26,16 @@ public class BLEConnector
 	public static final String DEVICE_TAG = "com.felhr.bleconnector.device_tag";
 	public static final String ADDRESS_TAG = "com.felhr.bleconnector.address_tag";
 	
+	// Bluetooth Low Energy Assigned UUIDS
+	private static final UUID CLIENT_CHARACTERISTIC_CONFIGURATION = UUID.fromString("");
+	
 	private Context context;
 	private Handler mHandler;
 	private BluetoothAdapter bleAdapter;
+	private WorkerThread workerThread;
 	private boolean genericScanning;
 	
-	private HashMap<String,BLEDevice> connectedDevices;
+	private BLEConnectedDevices connectedDevices;
 	
 	private UUID requestedService;
 	private UUID requestedCharacteristic;
@@ -89,17 +93,18 @@ public class BLEConnector
 	
 	public void writeCharacteristic(String deviceAddress, byte[] message)
 	{
-		
+		BLEDevice device = connectedDevices.get(deviceAddress);
+		buffer.putToOutput(new QueuedMessage(message,device));
 	}
 	
-	public void readCharacteristic(String deviceAddress, byte[] message)
+	public boolean registerForNotifications(String deviceAddress, UUID uuidService, UUID uuidCharacteristic)
 	{
-		
-	}
-	
-	public void registerForNotifications(String deviceAddress, UUID uuidService, UUID uuidCharacteristic)
-	{
-		
+		BluetoothGattCharacteristic characteristic = connectedDevices.get(deviceAddress).getCharacteristic();
+		BluetoothGattDescriptor clientCharConfigDescriptor = 
+				characteristic.getDescriptor(CLIENT_CHARACTERISTIC_CONFIGURATION);
+		clientCharConfigDescriptor.setValue(isSetProperty(PropertyType.NOTIFY,characteristic.getProperties()) ? BluetoothGattDescriptor.ENABLE_NOTIFICATION_VALUE
+				: BluetoothGattDescriptor.ENABLE_INDICATION_VALUE);
+		return connectedDevices.get(deviceAddress).getGatt().writeDescriptor(clientCharConfigDescriptor);
 	}
 
 
@@ -206,7 +211,16 @@ public class BLEConnector
 		}
 	}
 	
-	/* Inner classes */
+	private class WorkerThread extends Thread
+	{
+		@Override
+		public void run()
+		{
+			
+		}
+	}
+	
+	/* Inner classes and Enums */
 	
 	protected class QueuedMessage
 	{
@@ -239,4 +253,34 @@ public class BLEConnector
 			this.device = device;
 		}	
 	}
+	
+	private enum PropertyType
+	{
+        BROADCAST(1),
+        READ(2),
+        WRITE_NO_RESPONSE(4),
+        WRITE(8),
+        NOTIFY(16),
+        INDICATE(32),
+        SIGNED_WRITE(64),
+        EXTENDED_PROPS(128);
+
+        private final int value;
+
+        private PropertyType(int value)
+        {
+            this.value = value;
+        }
+
+        public int getValue() 
+        {
+            return value;
+        }
+    }
+	
+	 private boolean isSetProperty(PropertyType property, int properties) 
+	 {
+		 boolean isSet = ((properties >> (property.ordinal())) & 1) != 0;
+		 return isSet;
+	 }
 }

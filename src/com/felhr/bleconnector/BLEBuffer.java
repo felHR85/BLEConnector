@@ -16,7 +16,7 @@ public class BLEBuffer
 		inputBuffer = new ArrayBlockingQueue<QueuedMessage>(bufferSize);
 	}
 	
-	public boolean putToWrite(QueuedMessage message)
+	public boolean putToOutput(QueuedMessage message)
 	{
 		try 
 		{
@@ -29,7 +29,7 @@ public class BLEBuffer
 		}
 	}
 	
-	public boolean putToRead(QueuedMessage message)
+	public boolean putToInput(QueuedMessage message)
 	{
 		try 
 		{
@@ -42,7 +42,7 @@ public class BLEBuffer
 		}
 	}
 	
-	public QueuedMessage getFromWrite()
+	public QueuedMessage getFromOutput()
 	{
 		try 
 		{
@@ -54,7 +54,7 @@ public class BLEBuffer
 		}
 	}
 	
-	public QueuedMessage getFromRead()
+	public QueuedMessage getFromInput()
 	{
 		try 
 		{
