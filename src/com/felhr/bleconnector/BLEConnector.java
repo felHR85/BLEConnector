@@ -1,6 +1,7 @@
 package com.felhr.bleconnector;
 import java.util.List;
 import java.util.UUID;
+import java.util.concurrent.atomic.AtomicBoolean;
 
 import android.bluetooth.BluetoothAdapter;
 import android.bluetooth.BluetoothDevice;
@@ -34,6 +35,7 @@ public class BLEConnector
 	private BluetoothAdapter bleAdapter;
 	private WorkerThread workerThread;
 	private boolean genericScanning;
+	private AtomicBoolean operationReady;
 	
 	private BLEConnectedDevices connectedDevices;
 	
@@ -47,6 +49,8 @@ public class BLEConnector
 		this.context = context;
 		buffer = new BLEBuffer(128);
 		mHandler = new Handler();
+		workerThread = new WorkerThread();
+		operationReady = new AtomicBoolean(true);
 		final BluetoothManager bluetoothManager =
 				(BluetoothManager) context.getSystemService(Context.BLUETOOTH_SERVICE);
 		bleAdapter = bluetoothManager.getAdapter();
@@ -187,6 +191,16 @@ public class BLEConnector
 				}
 			}
 		}
+		
+		@Override
+		public void onCharacteristicWrite(BluetoothGatt gatt, BluetoothGattCharacteristic characteristic, int status)
+		{
+			synchronized(this)
+			{
+				operationReady.set(true);
+				notify();
+			}	
+		}
 	};
 	
 	
@@ -213,10 +227,49 @@ public class BLEConnector
 	
 	private class WorkerThread extends Thread
 	{
+		private boolean started;
+		
+		public WorkerThread()
+		{
+			started = true;
+		}
+		
 		@Override
 		public void run()
 		{
-			
+			sendMessage();
+		}
+		
+		private synchronized void sendMessage()
+		{
+			while(started)
+			{
+				QueuedMessage message = buffer.getFromOutput();
+				connectedDevices.setAllNotifications(false);
+				try 
+				{
+					wait(5); // This is not tested. I hope this will solve a problem that happens when you write
+					// a characteristic while you are receiving notifications from other device
+				} catch (InterruptedException e) 
+				{
+					e.printStackTrace();
+				}
+				while(!operationReady.get())
+				{
+					try 
+					{
+						wait();
+					} catch (InterruptedException e) 
+					{
+						e.printStackTrace();
+					}
+				}
+				BluetoothGatt gatt = message.getDevice().getGatt();
+				BluetoothGattCharacteristic characteristic = message.getDevice().getCharacteristic();
+				characteristic.setValue(message.getMessage());
+				gatt.writeCharacteristic(characteristic);
+				operationReady.set(false);
+			}
 		}
 	}
 	
