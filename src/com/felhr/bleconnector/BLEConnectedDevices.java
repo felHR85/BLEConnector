@@ -1,9 +1,9 @@
 package com.felhr.bleconnector;
 
-import java.util.HashMap;
+import java.util.Hashtable;
 import java.util.Map;
 
-public class BLEConnectedDevices extends HashMap<String,BLEDevice>
+public class BLEConnectedDevices extends Hashtable<String,BLEDevice>
 {
 	
 	private static final long serialVersionUID = 1L;

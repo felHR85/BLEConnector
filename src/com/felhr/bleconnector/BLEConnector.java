@@ -50,6 +50,7 @@ public class BLEConnector
 		buffer = new BLEBuffer(128);
 		mHandler = new Handler();
 		workerThread = new WorkerThread();
+		workerThread.start();
 		operationReady = new AtomicBoolean(true);
 		final BluetoothManager bluetoothManager =
 				(BluetoothManager) context.getSystemService(Context.BLUETOOTH_SERVICE);
@@ -101,13 +102,16 @@ public class BLEConnector
 		buffer.putToOutput(new QueuedMessage(message,device));
 	}
 	
-	public boolean registerForNotifications(String deviceAddress, UUID uuidService, UUID uuidCharacteristic)
+	public boolean registerForNotifications(String deviceAddress, UUID uuidService, UUID uuidCharacteristic,
+			BLENotificationCallback mCallback)
 	{
 		BluetoothGattCharacteristic characteristic = connectedDevices.get(deviceAddress).getCharacteristic();
 		BluetoothGattDescriptor clientCharConfigDescriptor = 
 				characteristic.getDescriptor(CLIENT_CHARACTERISTIC_CONFIGURATION);
 		clientCharConfigDescriptor.setValue(isSetProperty(PropertyType.NOTIFY,characteristic.getProperties()) ? BluetoothGattDescriptor.ENABLE_NOTIFICATION_VALUE
 				: BluetoothGattDescriptor.ENABLE_INDICATION_VALUE);
+		
+		workerThread.setCallback(mCallback);
 		return connectedDevices.get(deviceAddress).getGatt().writeDescriptor(clientCharConfigDescriptor);
 	}
 
@@ -201,6 +205,14 @@ public class BLEConnector
 				notify();
 			}	
 		}
+		
+		@Override
+		public void onCharacteristicChanged(BluetoothGatt gatt, BluetoothGattCharacteristic characteristic)
+		{
+			byte[] data = characteristic.getValue();
+			String deviceAddress = gatt.getDevice().getAddress();
+			workerThread.receiveNotifications(deviceAddress, data);
+		}
 	};
 	
 	
@@ -227,11 +239,17 @@ public class BLEConnector
 	
 	private class WorkerThread extends Thread
 	{
+		private BLENotificationCallback mCallback;
 		private boolean started;
 		
 		public WorkerThread()
 		{
 			started = true;
+		}
+		
+		public void setCallback(BLENotificationCallback mCallback)
+		{
+			this.mCallback = mCallback;
 		}
 		
 		@Override
@@ -271,6 +289,11 @@ public class BLEConnector
 				operationReady.set(false);
 			}
 		}
+		
+		public void receiveNotifications(String deviceAddress, byte[] data)
+		{
+			mCallback.onReceivedNotification(deviceAddress, data);
+		}
 	}
 	
 	/* Inner classes and Enums */
@@ -305,6 +328,11 @@ public class BLEConnector
 		{
 			this.device = device;
 		}	
+	}
+	
+	public interface BLENotificationCallback
+	{
+		public void onReceivedNotification(String addressDevice, byte[] data);
 	}
 	
 	private enum PropertyType
