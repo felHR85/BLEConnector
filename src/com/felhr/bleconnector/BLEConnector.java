@@ -1,4 +1,5 @@
 package com.felhr.bleconnector;
+
 import java.util.List;
 import java.util.UUID;
 import java.util.concurrent.atomic.AtomicBoolean;
@@ -34,7 +35,7 @@ public class BLEConnector
 	private Handler mHandler;
 	private BluetoothAdapter bleAdapter;
 	private WorkerThread workerThread;
-	private boolean genericScanning;
+	private boolean isScanning;
 	private AtomicBoolean operationReady;
 	
 	private BLEConnectedDevices connectedDevices;
@@ -68,32 +69,71 @@ public class BLEConnector
 				@Override
 				public void run() 
 				{
-					bleAdapter.stopLeScan(mScanCallback);
-					Intent intent = new Intent(ACTION_SCANNING_TERMINATED);
-					context.sendBroadcast(intent);
+					if(isScanning)
+					{
+						bleAdapter.stopLeScan(mScanCallback);
+						Intent intent = new Intent(ACTION_SCANNING_TERMINATED);
+						context.sendBroadcast(intent);
+					}
 				}
 			}, scanTime);
-			genericScanning = false;
 			requestedService = uuidService;
 			requestedCharacteristic = uuidCharacteristic;
-			bleAdapter.startLeScan(new UUID[]{uuidService}, mScanCallback);
+			isScanning = true;
+			bleAdapter.startLeScan(new UUID[]{uuidService}, mScanCallback); // This would only work if service data is in adv packets
 		}
 	}
-
-	public void connect(long scanTime)
+	
+	public UUID[] listOfServices(String deviceAddress)
 	{
-		mHandler.postDelayed(new Runnable()
+		BLEDevice device = connectedDevices.get(deviceAddress);
+		if(device == null)
+			return null;
+		List<BluetoothGattService> servicesList = device.getAllServices();
+		UUID[] uuids = new UUID[servicesList.size()];
+		for(int i=0;i<=servicesList.size()-1;i++)
 		{
-			@Override
-			public void run() 
-			{
-				bleAdapter.stopLeScan(mScanCallback);
-				Intent intent = new Intent(ACTION_SCANNING_TERMINATED);
-				context.sendBroadcast(intent);
-			}
-		}, scanTime);
-		genericScanning = true;
-		bleAdapter.startLeScan(mScanCallback);
+			BluetoothGattService service = servicesList.get(i);
+			uuids[i] = service.getUuid();
+		}
+		return uuids;
+	}
+	
+	public UUID[] listOfCharacteristics(String deviceAddress, UUID uuidService)
+	{
+		BLEDevice device = connectedDevices.get(deviceAddress);
+		if(device == null)
+			return null;
+		BluetoothGattService service = device.getGatt().getService(uuidService);
+		List<BluetoothGattCharacteristic> characteristicsList = service.getCharacteristics();
+		UUID[] uuids = new UUID[characteristicsList.size()];
+		for(int i=0;i<=characteristicsList.size()-1;i++)
+		{
+			BluetoothGattCharacteristic characteristic = characteristicsList.get(i);
+			uuids[i] = characteristic.getUuid();
+		}
+		return uuids;
+	}
+	
+	public boolean changeCurrentService(String deviceAddress, UUID uuidService)
+	{
+		BLEDevice device = connectedDevices.get(deviceAddress);
+		BluetoothGattService service = device.getGatt().getService(uuidService);
+		if(service == null)
+			return false;
+		connectedDevices.get(deviceAddress).setService(service);
+		return true;
+	}
+	
+	public boolean changeCurrentCharacteristic(String deviceAddress, UUID uuidCharacteristic)
+	{
+		BLEDevice device = connectedDevices.get(deviceAddress);
+		BluetoothGattService service = device.getService();
+		BluetoothGattCharacteristic characteristic = service.getCharacteristic(uuidCharacteristic);
+		if(characteristic == null)
+			return false;
+		connectedDevices.get(deviceAddress).setCharacteristic(characteristic);
+		return true;
 	}
 	
 	public void writeCharacteristic(String deviceAddress, byte[] message)
@@ -143,57 +183,41 @@ public class BLEConnector
 		@Override
 		public void onServicesDiscovered(BluetoothGatt gatt, int status)
 		{
-			if(genericScanning)
+
+			BluetoothGattService service = gatt.getService(requestedService);
+			if(service != null)
 			{
-				List<BluetoothGattService> services = gatt.getServices();
-				String[] uuids = new String[services.size()];
-				for(int i=0;i<=services.size()-1;i++)
+				BluetoothGattCharacteristic characteristic = service.getCharacteristic(requestedCharacteristic);
+				if(characteristic != null)
 				{
-					uuids[i] = services.get(i).getUuid().toString();
-				}
-				
-				Intent intent = new Intent(ACTION_BROADCAST_UUIDS);
-				intent.putExtra(UUIDS_TAG, uuids);
-				intent.putExtra(DEVICE_TAG, gatt.getDevice().getName());
-				intent.putExtra(ADDRESS_TAG, gatt.getDevice().getAddress());
-				context.sendBroadcast(intent);
-				
-			}else
-			{
-				BluetoothGattService service = gatt.getService(requestedService);
-				if(service != null)
-				{
-					BluetoothGattCharacteristic characteristic = service.getCharacteristic(requestedCharacteristic);
-					if(characteristic != null)
-					{
-						BLEDevice bleDevice  = connectedDevices.get(gatt.getDevice().getAddress());
-						bleDevice.setService(service);
-						bleDevice.setCharacteristic(characteristic);
-						String name = bleDevice.getDevice().getName();
-						String address = bleDevice.getDevice().getAddress();
-						connectedDevices.put(bleDevice.getDevice().getAddress(), bleDevice);
-						
-						Intent intent = new Intent(ACTION_DEVICE_CONNECTED);
-						intent.putExtra(DEVICE_TAG,name);
-						intent.putExtra(ADDRESS_TAG, address);
-						context.sendBroadcast(intent);
-						
-					}else
-					{
-						connectedDevices.remove(gatt.getDevice().getAddress());
-						Intent intent = new Intent(ACTION_NO_CHARACTERISTIC);
-						context.sendBroadcast(intent);
-						gatt.close();
-					}
-					
+					BLEDevice bleDevice  = connectedDevices.get(gatt.getDevice().getAddress());
+					bleDevice.setService(service);
+					bleDevice.setCharacteristic(characteristic);
+					String name = bleDevice.getDevice().getName();
+					String address = bleDevice.getDevice().getAddress();
+					connectedDevices.put(bleDevice.getDevice().getAddress(), bleDevice);
+
+					Intent intent = new Intent(ACTION_DEVICE_CONNECTED);
+					intent.putExtra(DEVICE_TAG,name);
+					intent.putExtra(ADDRESS_TAG, address);
+					context.sendBroadcast(intent);
+
 				}else
 				{
 					connectedDevices.remove(gatt.getDevice().getAddress());
-					Intent intent = new Intent(ACTION_NO_SERVICE);
+					Intent intent = new Intent(ACTION_NO_CHARACTERISTIC);
 					context.sendBroadcast(intent);
 					gatt.close();
 				}
+
+			}else
+			{
+				connectedDevices.remove(gatt.getDevice().getAddress());
+				Intent intent = new Intent(ACTION_NO_SERVICE);
+				context.sendBroadcast(intent);
+				gatt.close();
 			}
+
 		}
 		
 		@Override
@@ -263,15 +287,19 @@ public class BLEConnector
 			while(started)
 			{
 				QueuedMessage message = buffer.getFromOutput();
-				connectedDevices.setAllNotifications(false);
-				try 
+				boolean notifications = connectedDevices.setAllNotifications(false);
+				if(notifications)
 				{
-					wait(5); // This is not tested. I hope this will solve a problem that happens when you write
-					// a characteristic while you are receiving notifications from other device
-				} catch (InterruptedException e) 
-				{
-					e.printStackTrace();
+					try 
+					{
+						wait(5); // This is not tested. I hope this will solve a problem that happens when you write
+						// a characteristic while you are receiving notifications from other device
+					} catch (InterruptedException e) 
+					{
+						e.printStackTrace();
+					}
 				}
+				
 				while(!operationReady.get())
 				{
 					try 

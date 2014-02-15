@@ -13,16 +13,19 @@ public class BLEConnectedDevices extends Hashtable<String,BLEDevice>
 		super();
 	}
 	
-	public void setAllNotifications(boolean value)
+	public boolean setAllNotifications(boolean value)
 	{
+		boolean response = false;
 		for(Map.Entry<String, BLEDevice> entry: this.entrySet())
 		{
 			BLEDevice device = entry.getValue();
 			if(device.getNotificationsStatus())
 			{
+				response = true;
 				device.getGatt().setCharacteristicNotification(device.getCharacteristic(), value);
 			}
 		}
+		return response;
 	}
 	
 	public boolean setNotifications(String deviceAddress, boolean value)
