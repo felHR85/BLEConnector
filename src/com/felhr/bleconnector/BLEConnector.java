@@ -29,7 +29,7 @@ public class BLEConnector
 	public static final String ADDRESS_TAG = "com.felhr.bleconnector.address_tag";
 	
 	// Bluetooth Low Energy Assigned UUIDS
-	private static final UUID CLIENT_CHARACTERISTIC_CONFIGURATION = UUID.fromString("");
+	private static final UUID CLIENT_CHARACTERISTIC_CONFIGURATION = UUID.fromString(""); // TO DO
 	
 	private Context context;
 	private Handler mHandler;
@@ -287,19 +287,7 @@ public class BLEConnector
 			while(started)
 			{
 				QueuedMessage message = buffer.getFromOutput();
-				boolean notifications = connectedDevices.setAllNotifications(false);
-				if(notifications)
-				{
-					try 
-					{
-						wait(5); // This is not tested. I hope this will solve a problem that happens when you write
-						// a characteristic while you are receiving notifications from other device
-					} catch (InterruptedException e) 
-					{
-						e.printStackTrace();
-					}
-				}
-				
+				connectedDevices.setAllNotifications(false);
 				while(!operationReady.get())
 				{
 					try 
