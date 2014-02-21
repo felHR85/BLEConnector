@@ -288,7 +288,6 @@ public class BLEConnector
 			while(started)
 			{
 				QueuedMessage message = buffer.getFromOutput();
-				connectedDevices.setAllNotifications(false);
 				while(!operationReady.get())
 				{
 					try 
@@ -299,6 +298,7 @@ public class BLEConnector
 						e.printStackTrace();
 					}
 				}
+				connectedDevices.setAllNotifications(false);
 				BluetoothGatt gatt = message.getDevice().getGatt();
 				BluetoothGattCharacteristic characteristic = message.getDevice().getCharacteristic();
 				characteristic.setValue(message.getMessage());
