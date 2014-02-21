@@ -225,6 +225,7 @@ public class BLEConnector
 		{
 			synchronized(this)
 			{
+				connectedDevices.setAllNotifications(true);
 				operationReady.set(true);
 				notify();
 			}	
