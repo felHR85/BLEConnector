@@ -29,7 +29,7 @@ public class BLEConnector
 	public static final String ADDRESS_TAG = "com.felhr.bleconnector.address_tag";
 	
 	// Bluetooth Low Energy Assigned UUIDS
-	private static final UUID CLIENT_CHARACTERISTIC_CONFIGURATION = UUID.fromString(""); // TO DO
+	private static final UUID CLIENT_CHARACTERISTIC_CONFIGURATION = UUID.fromString("00002902-0000-1000-8000-00805f9b34fb"); // TO DO
 	
 	private Context context;
 	private Handler mHandler;
@@ -80,7 +80,7 @@ public class BLEConnector
 			requestedService = uuidService;
 			requestedCharacteristic = uuidCharacteristic;
 			isScanning = true;
-			bleAdapter.startLeScan(new UUID[]{uuidService}, mScanCallback); // This would only work if service data is in adv packets
+			bleAdapter.startLeScan(mScanCallback); // This would only work if service data is in adv packets
 		}
 	}
 	
