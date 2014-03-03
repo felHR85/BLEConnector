@@ -3,7 +3,7 @@ package com.felhr.bleconnector;
 import java.util.Hashtable;
 import java.util.Map;
 
-public class BLEConnectedDevices extends Hashtable<String,BLEDevice>
+public class BLEConnectedDevices extends Hashtable<String,BLEConnectedDevice>
 {
 	
 	private static final long serialVersionUID = 1L;
@@ -16,9 +16,9 @@ public class BLEConnectedDevices extends Hashtable<String,BLEDevice>
 	public boolean setAllNotifications(boolean value)
 	{
 		boolean response = false;
-		for(Map.Entry<String, BLEDevice> entry: this.entrySet())
+		for(Map.Entry<String, BLEConnectedDevice> entry: this.entrySet())
 		{
-			BLEDevice device = entry.getValue();
+			BLEConnectedDevice device = entry.getValue();
 			if(device.getNotificationsStatus())
 			{
 				response = true;
@@ -30,7 +30,7 @@ public class BLEConnectedDevices extends Hashtable<String,BLEDevice>
 	
 	public boolean setNotifications(String deviceAddress, boolean value)
 	{
-		BLEDevice device = get(deviceAddress);
+		BLEConnectedDevice device = get(deviceAddress);
 		if(device.getNotificationsStatus())
 		{
 			return device.getGatt().setCharacteristicNotification(device.getCharacteristic(), value);

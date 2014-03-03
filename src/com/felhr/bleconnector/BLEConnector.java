@@ -1,5 +1,6 @@
 package com.felhr.bleconnector;
 
+import java.util.Hashtable;
 import java.util.List;
 import java.util.UUID;
 import java.util.concurrent.atomic.AtomicBoolean;
@@ -20,6 +21,7 @@ public class BLEConnector
 {
 	public static final String ACTION_BROADCAST_UUIDS = "com.felhr.bleconnector.action_broadcast_uuids";
 	public static final String ACTION_DEVICE_CONNECTED = "com.felhr.bleconnector.action_device_connected";
+	public static final String ACTION_DEVICE_SPOTTED = "com.felhr.bleconnector.action_device_spotted";
 	public static final String ACTION_NO_CHARACTERISTIC = "com.felhr.bleconnector.action_no_characteristic";
 	public static final String ACTION_NO_SERVICE = "com.felhr.bleconnector.action_no_service";
 	public static final String ACTION_SCANNING_TERMINATED = "com.felhr.bleconnector.action_scanning_terminated";
@@ -27,9 +29,12 @@ public class BLEConnector
 	public static final String UUIDS_TAG = "com.felhr.bleconnector.uuids_tag";
 	public static final String DEVICE_TAG = "com.felhr.bleconnector.device_tag";
 	public static final String ADDRESS_TAG = "com.felhr.bleconnector.address_tag";
+	public static final String RSSI_TAG = "com.felhr.bleconnector.rssi_tag";
 	
 	// Bluetooth Low Energy Assigned UUIDS
 	private static final UUID CLIENT_CHARACTERISTIC_CONFIGURATION = UUID.fromString("00002902-0000-1000-8000-00805f9b34fb"); // TO DO
+	
+	private int connectMode; // 0 if you are going to spot devices only, 1 if you are going to perform a connection attempt.
 	
 	private Context context;
 	private Handler mHandler;
@@ -38,7 +43,8 @@ public class BLEConnector
 	private boolean isScanning;
 	private AtomicBoolean operationReady;
 	
-	private BLEConnectedDevices connectedDevices;
+	private BLEConnectedDevices connectedDevices; //Internally it is a hashtable
+	private Hashtable<String,BLEDevice> spottedDevices;
 	
 	private UUID requestedService;
 	private UUID requestedCharacteristic;
@@ -49,6 +55,7 @@ public class BLEConnector
 	{
 		this.context = context;
 		buffer = new BLEBuffer(128);
+		spottedDevices = new Hashtable<String,BLEDevice>();
 		mHandler = new Handler();
 		workerThread = new WorkerThread();
 		workerThread.start();
@@ -60,33 +67,21 @@ public class BLEConnector
 
 	/* Public Methods */
 	
-	public void connect(long scanTime, UUID uuidService, UUID uuidCharacteristic)
+	public void findBLEDevices(long scanTime)
 	{
-		if(bleAdapter != null && bleAdapter.isEnabled())
-		{
-			mHandler.postDelayed(new Runnable()
-			{
-				@Override
-				public void run() 
-				{
-					if(isScanning)
-					{
-						bleAdapter.stopLeScan(mScanCallback);
-						Intent intent = new Intent(ACTION_SCANNING_TERMINATED);
-						context.sendBroadcast(intent);
-					}
-				}
-			}, scanTime);
-			requestedService = uuidService;
-			requestedCharacteristic = uuidCharacteristic;
-			isScanning = true;
-			bleAdapter.startLeScan(mScanCallback); // This would only work if service data is in adv packets
-		}
+		spottedDevices.clear();
+		connectMode = 0;
+		startScan(scanTime);
+	}
+	
+	public void connect(String device, UUID uuidService, UUID uuidCharacteristic)
+	{
+		// TO-DO
 	}
 	
 	public UUID[] listOfServices(String deviceAddress)
 	{
-		BLEDevice device = connectedDevices.get(deviceAddress);
+		BLEConnectedDevice device = connectedDevices.get(deviceAddress);
 		if(device == null)
 			return null;
 		List<BluetoothGattService> servicesList = device.getAllServices();
@@ -101,7 +96,7 @@ public class BLEConnector
 	
 	public UUID[] listOfCharacteristics(String deviceAddress, UUID uuidService)
 	{
-		BLEDevice device = connectedDevices.get(deviceAddress);
+		BLEConnectedDevice device = connectedDevices.get(deviceAddress);
 		if(device == null)
 			return null;
 		BluetoothGattService service = device.getGatt().getService(uuidService);
@@ -117,7 +112,7 @@ public class BLEConnector
 	
 	public boolean changeCurrentService(String deviceAddress, UUID uuidService)
 	{
-		BLEDevice device = connectedDevices.get(deviceAddress);
+		BLEConnectedDevice device = connectedDevices.get(deviceAddress);
 		BluetoothGattService service = device.getGatt().getService(uuidService);
 		if(service == null)
 			return false;
@@ -127,7 +122,7 @@ public class BLEConnector
 	
 	public boolean changeCurrentCharacteristic(String deviceAddress, UUID uuidCharacteristic)
 	{
-		BLEDevice device = connectedDevices.get(deviceAddress);
+		BLEConnectedDevice device = connectedDevices.get(deviceAddress);
 		BluetoothGattService service = device.getService();
 		BluetoothGattCharacteristic characteristic = service.getCharacteristic(uuidCharacteristic);
 		if(characteristic == null)
@@ -138,7 +133,7 @@ public class BLEConnector
 	
 	public void writeCharacteristic(String deviceAddress, byte[] message)
 	{
-		BLEDevice device = connectedDevices.get(deviceAddress);
+		BLEConnectedDevice device = connectedDevices.get(deviceAddress);
 		buffer.putToOutput(new QueuedMessage(message,device));
 	}
 	
@@ -155,6 +150,29 @@ public class BLEConnector
 		return connectedDevices.get(deviceAddress).getGatt().writeDescriptor(clientCharConfigDescriptor);
 	}
 
+	/* Private Functions */
+	
+	private void startScan(long scanTime)
+	{
+		if(bleAdapter != null && bleAdapter.isEnabled())
+		{
+			mHandler.postDelayed(new Runnable()
+			{
+				@Override
+				public void run() 
+				{
+					if(isScanning)
+					{
+						bleAdapter.stopLeScan(mScanCallback);
+						Intent intent = new Intent(ACTION_SCANNING_TERMINATED);
+						context.sendBroadcast(intent);
+					}
+				}
+			}, scanTime);
+			isScanning = true;
+			bleAdapter.startLeScan(mScanCallback);
+		}
+	}
 
 	/* Bluetooth Low Energy API Callbacks */
 
@@ -164,7 +182,19 @@ public class BLEConnector
 		@Override
 		public void onLeScan(BluetoothDevice device, int rssi, byte[] scanRecord) 
 		{
-			new GATTConnectionThread(device, rssi).start();
+			if(connectMode == 0) // Store a spotted device
+			{
+				spottedDevices.put(device.getAddress(), new BLEDevice(device, rssi, scanRecord));
+				Intent intent = new Intent(ACTION_DEVICE_SPOTTED);
+				intent.putExtra(DEVICE_TAG,device.getName());
+				intent.putExtra(ADDRESS_TAG, device.getAddress());
+				intent.putExtra(RSSI_TAG, rssi);
+				context.sendBroadcast(intent);
+			}else if(connectMode == 1)
+			{
+				
+			}
+			
 		}
 
 	};
@@ -190,7 +220,7 @@ public class BLEConnector
 				BluetoothGattCharacteristic characteristic = service.getCharacteristic(requestedCharacteristic);
 				if(characteristic != null)
 				{
-					BLEDevice bleDevice  = connectedDevices.get(gatt.getDevice().getAddress());
+					BLEConnectedDevice bleDevice  = connectedDevices.get(gatt.getDevice().getAddress());
 					bleDevice.setService(service);
 					bleDevice.setCharacteristic(characteristic);
 					String name = bleDevice.getDevice().getName();
@@ -242,25 +272,6 @@ public class BLEConnector
 	
 	
 	/* Operation Threads*/
-	
-	private class GATTConnectionThread extends Thread
-	{
-		private BluetoothDevice device;
-		private int rssi;
-		public GATTConnectionThread(BluetoothDevice device,int rssi)
-		{
-			this.device = device;
-			this.rssi = rssi;
-		}
-		
-		@Override
-		public void run()
-		{
-			BluetoothGatt gatt = device.connectGatt(context, false, mGattCallback);
-			BLEDevice deviceBle = new BLEDevice(device,gatt);
-			connectedDevices.put(device.getAddress(), deviceBle);
-		}
-	}
 	
 	private class WorkerThread extends Thread
 	{
@@ -318,9 +329,9 @@ public class BLEConnector
 	protected class QueuedMessage
 	{
 		private byte[] message;
-		private BLEDevice device;
+		private BLEConnectedDevice device;
 		
-		public QueuedMessage(byte[] message, BLEDevice device)
+		public QueuedMessage(byte[] message, BLEConnectedDevice device)
 		{
 			this.message = message;
 			this.device = device;
@@ -336,12 +347,12 @@ public class BLEConnector
 			this.message = message;
 		}
 
-		public BLEDevice getDevice() 
+		public BLEConnectedDevice getDevice() 
 		{
 			return device;
 		}
 
-		public void setDevice(BLEDevice device) 
+		public void setDevice(BLEConnectedDevice device) 
 		{
 			this.device = device;
 		}	

@@ -1,35 +1,19 @@
 package com.felhr.bleconnector;
 
-import java.util.List;
-import java.util.UUID;
-
 import android.bluetooth.BluetoothDevice;
-import android.bluetooth.BluetoothGatt;
-import android.bluetooth.BluetoothGattCharacteristic;
-import android.bluetooth.BluetoothGattService;
 
 public class BLEDevice 
 {
 	private BluetoothDevice device;
-	private BluetoothGatt gatt;
-	private BluetoothGattService service; // Current Service
-	private BluetoothGattCharacteristic characteristic; // Current Characteristic
-	private boolean enabledNotifications;
+	private int rssi;
+	private byte[] scanRecord;
+	// Decoded ScanRecord bytes should be here too
 	
-	public BLEDevice(BluetoothDevice device, BluetoothGatt gatt, BluetoothGattService service
-			,BluetoothGattCharacteristic characteristic)
+	public BLEDevice(BluetoothDevice device, int rssi, byte[] scanRecord) 
 	{
 		this.device = device;
-		this.gatt = gatt;
-		this.service = service;
-		this.characteristic = characteristic;
-		this.enabledNotifications = false;
-	}
-	
-	public BLEDevice(BluetoothDevice device, BluetoothGatt gatt)
-	{
-		this.device = device;
-		this.gatt = gatt;
+		this.rssi = rssi;
+		this.scanRecord = scanRecord;
 	}
 
 	public BluetoothDevice getDevice() 
@@ -42,61 +26,24 @@ public class BLEDevice
 		this.device = device;
 	}
 
-	public BluetoothGatt getGatt() 
+	public int getRssi() 
 	{
-		return gatt;
+		return rssi;
 	}
 
-	public void setGatt(BluetoothGatt gatt) 
+	public void setRssi(int rssi) 
 	{
-		this.gatt = gatt;
+		this.rssi = rssi;
 	}
 
-	public BluetoothGattService getService() 
+	public byte[] getScanRecord() 
 	{
-		return service;
+		return scanRecord;
 	}
 
-	public void setService(BluetoothGattService service) 
+	public void setScanRecord(byte[] scanRecord) 
 	{
-		this.service = service;
-	}
-
-	public BluetoothGattCharacteristic getCharacteristic() 
-	{
-		return characteristic;
-	}
-
-	public void setCharacteristic(BluetoothGattCharacteristic characteristic) 
-	{
-		this.characteristic = characteristic;
+		this.scanRecord = scanRecord;
 	}
 	
-	public List<BluetoothGattService> getAllServices()
-	{
-		return gatt.getServices();
-	}
-	
-	public List<BluetoothGattCharacteristic> getAllCharacteristics(UUID serviceuuid)
-	{
-		return gatt.getService(serviceuuid).getCharacteristics();
-	}
-	
-	public boolean getNotificationsStatus()
-	{
-		return enabledNotifications;
-	}
-	
-	public void notificationsOn()
-	{
-		enabledNotifications = true;
-	}
-	
-	public void notificationsOff()
-	{
-		enabledNotifications = false;
-	}
-	
-	
-
 }
