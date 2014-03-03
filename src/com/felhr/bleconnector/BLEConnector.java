@@ -34,8 +34,8 @@ public class BLEConnector
 	// Bluetooth Low Energy Assigned UUIDS
 	private static final UUID CLIENT_CHARACTERISTIC_CONFIGURATION = UUID.fromString("00002902-0000-1000-8000-00805f9b34fb"); // TO DO
 	
-	private int connectMode; // 0 if you are going to spot devices only, 1 if you are going to perform a connection attempt.
-	
+	private int connectMode; // 0 if you are going to spot devices only, 1 if you are going to perform a connection attempt with service and characteristic
+							 // 2 connection attempt with an specified service, 3 connection attempt without any specified service
 	private Context context;
 	private Handler mHandler;
 	private BluetoothAdapter bleAdapter;
@@ -55,6 +55,7 @@ public class BLEConnector
 	{
 		this.context = context;
 		buffer = new BLEBuffer(128);
+		connectedDevices = new BLEConnectedDevices();
 		spottedDevices = new Hashtable<String,BLEDevice>();
 		mHandler = new Handler();
 		workerThread = new WorkerThread();
@@ -74,9 +75,49 @@ public class BLEConnector
 		startScan(scanTime);
 	}
 	
-	public void connect(String device, UUID uuidService, UUID uuidCharacteristic)
+	public boolean connect(String deviceAddress, UUID uuidService, UUID uuidCharacteristic)
 	{
-		// TO-DO
+		BLEDevice bleDevice = spottedDevices.get(deviceAddress);
+		connectMode = 1;
+		if(bleDevice != null)
+		{
+			requestedService = uuidService;
+			requestedCharacteristic = uuidCharacteristic;
+			bleDevice.getDevice().connectGatt(context, false, mGattCallback);
+			return true;
+		}else
+		{
+			return false;
+		}
+	}
+	
+	public boolean connect(String deviceAddress, UUID uuidService)
+	{
+		BLEDevice bleDevice = spottedDevices.get(deviceAddress);
+		connectMode = 2;
+		if(bleDevice != null)
+		{
+			requestedService = uuidService;
+			bleDevice.getDevice().connectGatt(context, false, mGattCallback);
+			return true;
+		}else
+		{
+			return false;
+		}
+	}
+	
+	public boolean connect(String deviceAddress)
+	{
+		BLEDevice bleDevice = spottedDevices.get(deviceAddress);
+		connectMode = 3;
+		if(bleDevice != null)
+		{
+			bleDevice.getDevice().connectGatt(context, false, mGattCallback);
+			return true;
+		}else
+		{
+			return false;
+		}
 	}
 	
 	public UUID[] listOfServices(String deviceAddress)
@@ -190,9 +231,9 @@ public class BLEConnector
 				intent.putExtra(ADDRESS_TAG, device.getAddress());
 				intent.putExtra(RSSI_TAG, rssi);
 				context.sendBroadcast(intent);
-			}else if(connectMode == 1)
+			}else 
 			{
-				
+				// Connect to an array of advertised UUIDs.
 			}
 			
 		}
@@ -206,38 +247,56 @@ public class BLEConnector
 		{
 			if(status == BluetoothGatt.GATT_SUCCESS && newState == BluetoothGatt.STATE_CONNECTED)
 			{
-				gatt.discoverServices();
+				BLEDevice device = spottedDevices.get(gatt.getDevice().getAddress());
+				BLEConnectedDevice connectedDevice = new BLEConnectedDevice(device);
+				connectedDevice.setGatt(gatt);
+				connectedDevice.notificationsOff();
+				if(connectMode == 1 || connectMode == 2)
+					gatt.discoverServices();
+				
+			}else if(status == BluetoothGatt.GATT_SUCCESS && newState == BluetoothGatt.STATE_DISCONNECTED)
+			{
+				connectedDevices.remove(gatt.getDevice().getAddress());
 			}
 		}
 		
 		@Override
 		public void onServicesDiscovered(BluetoothGatt gatt, int status)
 		{
-
 			BluetoothGattService service = gatt.getService(requestedService);
 			if(service != null)
 			{
-				BluetoothGattCharacteristic characteristic = service.getCharacteristic(requestedCharacteristic);
-				if(characteristic != null)
+				BLEConnectedDevice bleDevice  = connectedDevices.get(gatt.getDevice().getAddress());
+				bleDevice.setService(service);
+				String name = bleDevice.getDevice().getName();
+				String address = bleDevice.getDevice().getAddress();
+				if(connectMode == 2)
 				{
-					BLEConnectedDevice bleDevice  = connectedDevices.get(gatt.getDevice().getAddress());
-					bleDevice.setService(service);
+					BluetoothGattCharacteristic characteristic = service.getCharacteristic(requestedCharacteristic);
 					bleDevice.setCharacteristic(characteristic);
-					String name = bleDevice.getDevice().getName();
-					String address = bleDevice.getDevice().getAddress();
-					connectedDevices.put(bleDevice.getDevice().getAddress(), bleDevice);
+					if(characteristic != null)
+					{
+						bleDevice.setCharacteristic(characteristic);
+						Intent intent = new Intent(ACTION_DEVICE_CONNECTED);
+						intent.putExtra(DEVICE_TAG,name);
+						intent.putExtra(ADDRESS_TAG, address);
+						connectedDevices.put(bleDevice.getDevice().getAddress(), bleDevice);
+						context.sendBroadcast(intent);
 
+					}else
+					{
+						connectedDevices.remove(gatt.getDevice().getAddress());
+						Intent intent = new Intent(ACTION_NO_CHARACTERISTIC);
+						context.sendBroadcast(intent);
+						gatt.close();
+					}
+				}else
+				{
 					Intent intent = new Intent(ACTION_DEVICE_CONNECTED);
 					intent.putExtra(DEVICE_TAG,name);
 					intent.putExtra(ADDRESS_TAG, address);
+					connectedDevices.put(bleDevice.getDevice().getAddress(), bleDevice);
 					context.sendBroadcast(intent);
-
-				}else
-				{
-					connectedDevices.remove(gatt.getDevice().getAddress());
-					Intent intent = new Intent(ACTION_NO_CHARACTERISTIC);
-					context.sendBroadcast(intent);
-					gatt.close();
 				}
 
 			}else

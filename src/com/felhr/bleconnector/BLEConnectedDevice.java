@@ -26,7 +26,7 @@ public class BLEConnectedDevice extends BLEDevice
 		this.enabledNotifications = false;
 	}
 	
-	public BLEConnectedDevice(BLEConnectedDevice device)
+	public BLEConnectedDevice(BLEDevice device)
 	{
 		super(device.getDevice(),device.getRssi(),device.getScanRecord());
 	}
