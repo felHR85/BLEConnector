@@ -205,6 +205,7 @@ public class BLEConnector
 					if(isScanning)
 					{
 						bleAdapter.stopLeScan(mScanCallback);
+						isScanning = false;
 						Intent intent = new Intent(ACTION_SCANNING_TERMINATED);
 						context.sendBroadcast(intent);
 					}
@@ -225,12 +226,16 @@ public class BLEConnector
 		{
 			if(connectMode == 0) // Store a spotted device
 			{
-				spottedDevices.put(device.getAddress(), new BLEDevice(device, rssi, scanRecord));
-				Intent intent = new Intent(ACTION_DEVICE_SPOTTED);
-				intent.putExtra(DEVICE_TAG,device.getName());
-				intent.putExtra(ADDRESS_TAG, device.getAddress());
-				intent.putExtra(RSSI_TAG, rssi);
-				context.sendBroadcast(intent);
+				String deviceAddress = device.getAddress();
+				if(!spottedDevices.containsKey(deviceAddress))
+				{
+					spottedDevices.put(deviceAddress, new BLEDevice(device, rssi, scanRecord));
+					Intent intent = new Intent(ACTION_DEVICE_SPOTTED);
+					intent.putExtra(DEVICE_TAG,device.getName());
+					intent.putExtra(ADDRESS_TAG, device.getAddress());
+					intent.putExtra(RSSI_TAG, rssi);
+					context.sendBroadcast(intent);
+				}
 			}else 
 			{
 				// Connect to an array of advertised UUIDs.
@@ -251,6 +256,7 @@ public class BLEConnector
 				BLEConnectedDevice connectedDevice = new BLEConnectedDevice(device);
 				connectedDevice.setGatt(gatt);
 				connectedDevice.notificationsOff();
+				connectedDevices.put(gatt.getDevice().getAddress(), connectedDevice);
 				if(connectMode == 1 || connectMode == 2)
 					gatt.discoverServices();
 				
