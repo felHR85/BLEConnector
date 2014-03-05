@@ -16,6 +16,7 @@ import android.bluetooth.BluetoothManager;
 import android.content.Context;
 import android.content.Intent;
 import android.os.Handler;
+import android.util.Log;
 
 public class BLEConnector 
 {
@@ -151,7 +152,7 @@ public class BLEConnector
 		return uuids;
 	}
 	
-	public boolean changeCurrentService(String deviceAddress, UUID uuidService)
+	public boolean setService(String deviceAddress, UUID uuidService)
 	{
 		BLEConnectedDevice device = connectedDevices.get(deviceAddress);
 		BluetoothGattService service = device.getGatt().getService(uuidService);
@@ -161,7 +162,7 @@ public class BLEConnector
 		return true;
 	}
 	
-	public boolean changeCurrentCharacteristic(String deviceAddress, UUID uuidCharacteristic)
+	public boolean setCharacteristic(String deviceAddress, UUID uuidCharacteristic)
 	{
 		BLEConnectedDevice device = connectedDevices.get(deviceAddress);
 		BluetoothGattService service = device.getService();
@@ -215,6 +216,11 @@ public class BLEConnector
 			bleAdapter.startLeScan(mScanCallback);
 		}
 	}
+	
+	private void sendBroadcast(String action)
+	{
+		// TO-DO
+	}
 
 	/* Bluetooth Low Energy API Callbacks */
 
@@ -257,8 +263,7 @@ public class BLEConnector
 				connectedDevice.setGatt(gatt);
 				connectedDevice.notificationsOff();
 				connectedDevices.put(gatt.getDevice().getAddress(), connectedDevice);
-				if(connectMode == 1 || connectMode == 2)
-					gatt.discoverServices();
+				gatt.discoverServices();
 				
 			}else if(status == BluetoothGatt.GATT_SUCCESS && newState == BluetoothGatt.STATE_DISCONNECTED)
 			{
@@ -269,15 +274,16 @@ public class BLEConnector
 		@Override
 		public void onServicesDiscovered(BluetoothGatt gatt, int status)
 		{
-			BluetoothGattService service = gatt.getService(requestedService);
-			if(service != null)
+			if(connectMode == 1)
 			{
-				BLEConnectedDevice bleDevice  = connectedDevices.get(gatt.getDevice().getAddress());
-				bleDevice.setService(service);
-				String name = bleDevice.getDevice().getName();
-				String address = bleDevice.getDevice().getAddress();
-				if(connectMode == 2)
+				BluetoothGattService service = gatt.getService(requestedService);
+				if(service != null)
 				{
+					BLEConnectedDevice bleDevice  = connectedDevices.get(gatt.getDevice().getAddress());
+					bleDevice.setService(service);
+					String name = bleDevice.getDevice().getName();
+					String address = bleDevice.getDevice().getAddress();
+
 					BluetoothGattCharacteristic characteristic = service.getCharacteristic(requestedCharacteristic);
 					bleDevice.setCharacteristic(characteristic);
 					if(characteristic != null)
@@ -298,21 +304,44 @@ public class BLEConnector
 					}
 				}else
 				{
+					connectedDevices.remove(gatt.getDevice().getAddress());
+					Intent intent = new Intent(ACTION_NO_SERVICE);
+					context.sendBroadcast(intent);
+					gatt.close();
+				}
+			}else if(connectMode == 2)
+			{
+				BluetoothGattService service = gatt.getService(requestedService);
+				if(service != null)
+				{
+					BLEConnectedDevice bleDevice  = connectedDevices.get(gatt.getDevice().getAddress());
+					bleDevice.setService(service);
+					String name = bleDevice.getDevice().getName();
+					String address = bleDevice.getDevice().getAddress();
+
 					Intent intent = new Intent(ACTION_DEVICE_CONNECTED);
 					intent.putExtra(DEVICE_TAG,name);
 					intent.putExtra(ADDRESS_TAG, address);
 					connectedDevices.put(bleDevice.getDevice().getAddress(), bleDevice);
 					context.sendBroadcast(intent);
+				}else
+				{
+					connectedDevices.remove(gatt.getDevice().getAddress());
+					Intent intent = new Intent(ACTION_NO_SERVICE);
+					context.sendBroadcast(intent);
+					gatt.close();
 				}
-
-			}else
+			}else if(connectMode == 3)
 			{
-				connectedDevices.remove(gatt.getDevice().getAddress());
-				Intent intent = new Intent(ACTION_NO_SERVICE);
-				context.sendBroadcast(intent);
-				gatt.close();
-			}
+				BLEConnectedDevice bleDevice  = connectedDevices.get(gatt.getDevice().getAddress());
+				String name = bleDevice.getDevice().getName();
+				String address = bleDevice.getDevice().getAddress();
 
+				Intent intent = new Intent(ACTION_DEVICE_CONNECTED);
+				intent.putExtra(DEVICE_TAG,name);
+				intent.putExtra(ADDRESS_TAG, address);
+				context.sendBroadcast(intent);
+			}
 		}
 		
 		@Override
@@ -364,6 +393,7 @@ public class BLEConnector
 			while(started)
 			{
 				QueuedMessage message = buffer.getFromOutput();
+				Log.i("BLEConnector","get Message");
 				while(!operationReady.get())
 				{
 					try 
@@ -378,8 +408,8 @@ public class BLEConnector
 				BluetoothGatt gatt = message.getDevice().getGatt();
 				BluetoothGattCharacteristic characteristic = message.getDevice().getCharacteristic();
 				characteristic.setValue(message.getMessage());
-				gatt.writeCharacteristic(characteristic);
 				operationReady.set(false);
+				gatt.writeCharacteristic(characteristic);
 			}
 		}
 		
