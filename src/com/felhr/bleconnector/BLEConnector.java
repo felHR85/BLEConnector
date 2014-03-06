@@ -185,16 +185,19 @@ public class BLEConnector
 	
 	public boolean registerForNotifications(String deviceAddress, BLENotificationCallback mCallback)
 	{
-		BluetoothGattCharacteristic characteristic = connectedDevices.get(deviceAddress).getCharacteristic();
-		BluetoothGatt gatt = connectedDevices.get(deviceAddress).getGatt();
+		BLEConnectedDevice device = connectedDevices.get(deviceAddress);
+		BluetoothGattCharacteristic characteristic = device.getCharacteristic();
 		if(characteristic != null)
 		{
+			BluetoothGatt gatt = device.getGatt();
 			gatt.setCharacteristicNotification(characteristic, true);
 			BluetoothGattDescriptor clientCharConfigDescriptor = 
 					characteristic.getDescriptor(CLIENT_CHARACTERISTIC_CONFIGURATION);
 			clientCharConfigDescriptor.setValue(isSetProperty(PropertyType.NOTIFY,characteristic.getProperties()) ? BluetoothGattDescriptor.ENABLE_NOTIFICATION_VALUE
 					: BluetoothGattDescriptor.ENABLE_INDICATION_VALUE);
 			workerThread.setCallback(mCallback);
+			device.notificationsOn();
+			connectedDevices.put(deviceAddress, device);
 			return gatt.writeDescriptor(clientCharConfigDescriptor);
 		}else
 		{
