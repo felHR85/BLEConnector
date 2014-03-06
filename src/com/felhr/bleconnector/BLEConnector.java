@@ -16,7 +16,6 @@ import android.bluetooth.BluetoothManager;
 import android.content.Context;
 import android.content.Intent;
 import android.os.Handler;
-import android.util.Log;
 
 public class BLEConnector 
 {
@@ -26,6 +25,7 @@ public class BLEConnector
 	public static final String ACTION_NO_CHARACTERISTIC = "com.felhr.bleconnector.action_no_characteristic";
 	public static final String ACTION_NO_SERVICE = "com.felhr.bleconnector.action_no_service";
 	public static final String ACTION_SCANNING_TERMINATED = "com.felhr.bleconnector.action_scanning_terminated";
+	public static final String ACTION_NOTIFICATIONS_ENABLED = "com.felhr.bleconnector.action_notifications_enabled";
 	
 	public static final String UUIDS_TAG = "com.felhr.bleconnector.uuids_tag";
 	public static final String DEVICE_TAG = "com.felhr.bleconnector.device_tag";
@@ -41,8 +41,10 @@ public class BLEConnector
 	private Handler mHandler;
 	private BluetoothAdapter bleAdapter;
 	private WorkerThread workerThread;
+	private int bufferSize;
 	private boolean isScanning;
 	private AtomicBoolean operationReady;
+	private Object objectMonitor;
 	
 	private BLEConnectedDevices connectedDevices; //Internally it is a hashtable
 	private Hashtable<String,BLEDevice> spottedDevices;
@@ -55,7 +57,9 @@ public class BLEConnector
 	public BLEConnector(Context context)
 	{
 		this.context = context;
-		buffer = new BLEBuffer(128);
+		bufferSize = 128;
+		objectMonitor = new Object();
+		buffer = new BLEBuffer(bufferSize);
 		connectedDevices = new BLEConnectedDevices();
 		spottedDevices = new Hashtable<String,BLEDevice>();
 		mHandler = new Handler();
@@ -179,17 +183,23 @@ public class BLEConnector
 		buffer.putToOutput(new QueuedMessage(message,device));
 	}
 	
-	public boolean registerForNotifications(String deviceAddress, UUID uuidService, UUID uuidCharacteristic,
-			BLENotificationCallback mCallback)
+	public boolean registerForNotifications(String deviceAddress, BLENotificationCallback mCallback)
 	{
 		BluetoothGattCharacteristic characteristic = connectedDevices.get(deviceAddress).getCharacteristic();
-		BluetoothGattDescriptor clientCharConfigDescriptor = 
-				characteristic.getDescriptor(CLIENT_CHARACTERISTIC_CONFIGURATION);
-		clientCharConfigDescriptor.setValue(isSetProperty(PropertyType.NOTIFY,characteristic.getProperties()) ? BluetoothGattDescriptor.ENABLE_NOTIFICATION_VALUE
-				: BluetoothGattDescriptor.ENABLE_INDICATION_VALUE);
-		
-		workerThread.setCallback(mCallback);
-		return connectedDevices.get(deviceAddress).getGatt().writeDescriptor(clientCharConfigDescriptor);
+		BluetoothGatt gatt = connectedDevices.get(deviceAddress).getGatt();
+		if(characteristic != null)
+		{
+			gatt.setCharacteristicNotification(characteristic, true);
+			BluetoothGattDescriptor clientCharConfigDescriptor = 
+					characteristic.getDescriptor(CLIENT_CHARACTERISTIC_CONFIGURATION);
+			clientCharConfigDescriptor.setValue(isSetProperty(PropertyType.NOTIFY,characteristic.getProperties()) ? BluetoothGattDescriptor.ENABLE_NOTIFICATION_VALUE
+					: BluetoothGattDescriptor.ENABLE_INDICATION_VALUE);
+			workerThread.setCallback(mCallback);
+			return gatt.writeDescriptor(clientCharConfigDescriptor);
+		}else
+		{
+			return false;
+		}
 	}
 
 	/* Private Functions */
@@ -347,11 +357,11 @@ public class BLEConnector
 		@Override
 		public void onCharacteristicWrite(BluetoothGatt gatt, BluetoothGattCharacteristic characteristic, int status)
 		{
-			synchronized(this)
+			synchronized(objectMonitor)
 			{
 				connectedDevices.setAllNotifications(true);
 				operationReady.set(true);
-				notify();
+				objectMonitor.notify();
 			}	
 		}
 		
@@ -361,6 +371,19 @@ public class BLEConnector
 			byte[] data = characteristic.getValue();
 			String deviceAddress = gatt.getDevice().getAddress();
 			workerThread.receiveNotifications(deviceAddress, data);
+		}
+		
+		@Override
+		public void onDescriptorWrite(BluetoothGatt gatt, BluetoothGattDescriptor descriptor, int status)
+		{
+			BLEConnectedDevice bleDevice  = connectedDevices.get(gatt.getDevice().getAddress());
+			String name = bleDevice.getDevice().getName();
+			String address = bleDevice.getDevice().getAddress();
+			
+			Intent intent = new Intent(ACTION_NOTIFICATIONS_ENABLED);
+			intent.putExtra(DEVICE_TAG,name);
+			intent.putExtra(ADDRESS_TAG, address);
+			context.sendBroadcast(intent);
 		}
 	};
 	
@@ -388,20 +411,22 @@ public class BLEConnector
 			sendMessage();
 		}
 		
-		private synchronized void sendMessage()
+		private void sendMessage()
 		{
 			while(started)
 			{
 				QueuedMessage message = buffer.getFromOutput();
-				Log.i("BLEConnector","get Message");
-				while(!operationReady.get())
+				synchronized(objectMonitor)
 				{
-					try 
+					while(!operationReady.get())
 					{
-						wait();
-					} catch (InterruptedException e) 
-					{
-						e.printStackTrace();
+						try 
+						{
+							objectMonitor.wait();
+						} catch (InterruptedException e) 
+						{
+							e.printStackTrace();
+						}
 					}
 				}
 				connectedDevices.setAllNotifications(false);
