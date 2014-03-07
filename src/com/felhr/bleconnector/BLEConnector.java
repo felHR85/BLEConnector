@@ -230,11 +230,6 @@ public class BLEConnector
 		}
 	}
 	
-	private void sendBroadcast(String action)
-	{
-		// TO-DO
-	}
-
 	/* Bluetooth Low Energy API Callbacks */
 
 	private final BluetoothAdapter.LeScanCallback mScanCallback = new BluetoothAdapter.LeScanCallback()
